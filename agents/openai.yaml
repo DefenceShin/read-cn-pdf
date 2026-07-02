@@ -1,0 +1,4 @@
+interface:
+  display_name: "Read Chinese PDFs"
+  short_description: "Stable PDF text extraction for Chinese paths on Windows."
+  default_prompt: "Use $read-cn-pdf to extract and inspect Chinese PDF text without PowerShell encoding failures."
