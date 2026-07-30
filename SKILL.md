@@ -1,11 +1,12 @@
 ---
 name: read-cn-pdf
-description: Stable workflow for reading and extracting text from PDFs or script-generated Chinese summaries on Windows PowerShell, especially when direct paths become ?????, terminal output hits GBK/UnicodeEncodeError, or Chinese/symbol output becomes mojibake. Use before inspecting local Chinese rule PDFs, bilingual rulebook comparisons, or Chinese data extraction where Windows encoding has failed or is likely to fail.
+description: Use when reading local PDFs or generated summaries with Chinese paths, Chinese text, special symbols, PowerShell mojibake, GBK output failures, UnicodeEncodeError, or an uncertain Python/PyMuPDF environment on Windows.
 ---
 
 # Read Chinese PDFs
 
-Use this skill when reading local PDFs with Chinese filenames, Chinese folder names, or special symbols from Windows PowerShell. The goal is to avoid the common failed first attempt caused by PowerShell 5.1 path/output encoding.
+Reliably extract bounded text when Windows PowerShell path or output encoding is
+unsafe.
 
 ## Default Workflow
 
@@ -27,42 +28,33 @@ $env:PDF_PATH = $pdf
 $env:PYTHONIOENCODING = 'utf-8'
 ```
 
-4. Extract with PyMuPDF (`fitz`) and keep output bounded:
+4. Use the launcher. It selects a PyMuPDF-capable Python from the current
+   interpreter, Windows `py` launcher, or `PATH`.
 
 ```powershell
-@'
-import os, fitz
-path = os.environ['PDF_PATH']
-doc = fitz.open(path)
-for i, page in enumerate(doc):
-    text = page.get_text()
-    print(f"\n=== PAGE {i + 1} ===")
-    print(text.replace("\n", " | ")[:4000])
-'@ | python -
+python 'C:\Users\lrui6\.codex\skills\read-cn-pdf\scripts\run_pdf_extract.py' --pages 1-5 --max-chars 2500
 ```
 
 ## Preferred Script
 
-Use `scripts/extract_pdf_text.py` when the task is more than a one-off snippet. It accepts a path through `PDF_PATH` or `--path`, supports page ranges, keyword filtering, and bounded output.
+Use `scripts/run_pdf_extract.py` for normal work. Run `--help` for page ranges,
+literal keyword filtering, bounded output, and verified UTF-8 file output.
 
 Examples:
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
 $env:PDF_PATH=(Get-ChildItem -LiteralPath 'rules CN' | Where-Object { $_.Name -like '*探索*' } | Select-Object -First 1).FullName
-python 'C:\Users\lrui6\.codex\skills\read-cn-pdf\scripts\extract_pdf_text.py' --terms 荣誉点 战役物品 --max-chars 2500
-```
-
-```powershell
-$env:PYTHONIOENCODING='utf-8'
-python 'C:\Users\lrui6\.codex\skills\read-cn-pdf\scripts\extract_pdf_text.py' --path 'rules/Trench-Crusade-Digital-Rulebook.pdf' --pages 113-125 --terms "Glory Item" Exploration --max-chars 3000
+python 'C:\Users\lrui6\.codex\skills\read-cn-pdf\scripts\run_pdf_extract.py' --terms 荣誉点 战役物品 --max-chars 2500 --output 'tmp/pdfs/exploration.txt'
 ```
 
 ## Rules
 
 - Do not pass Chinese PDF paths as Python string literals unless they were already proven safe in the current shell.
 - Do not trust mojibake in PowerShell output as evidence that the source file is corrupt. Re-run through UTF-8 output first.
-- If direct output still fails, write extracted text to `tmp/pdfs/<name>.txt` with `encoding='utf-8'`, then inspect it with a UTF-8-aware command or targeted search.
+- Treat every `--terms` value as a literal Unicode substring. Use regular expressions only after the pattern and its encoding are known-good.
+- When the extracted text will be evidence, use `--output`. The extractor writes UTF-8, performs an explicit UTF-8 read back, and fails if the content differs.
+- If no capable Python is found, install `pymupdf` into a known interpreter; do not assume the first `python` command is the only environment.
 - Keep extraction bounded with page ranges, search terms, or `--max-chars`; avoid dumping entire large rulebooks into the conversation.
 - For bilingual checks, extract the English source pages and the Chinese PDF pages separately, then compare concepts and rule effects rather than relying on exact line layout.
 
@@ -73,7 +65,7 @@ The same Windows PowerShell output problem can appear when loading Chinese data 
 Preferred pattern:
 
 1. Generate a bounded Markdown or JSON report under `tmp/` with explicit UTF-8 encoding.
-2. Read or search that file instead of trusting the console rendering.
+2. Read the file back with explicit UTF-8, then search that verified content instead of trusting the console rendering.
 3. If a final answer needs Chinese names, take them from the source data or the UTF-8 report, not from mojibake terminal text.
 
 Example for Node-based data inspection:
