@@ -1,6 +1,6 @@
 ---
 name: read-cn-pdf
-description: Use when reading local PDFs or generated summaries with Chinese paths, Chinese text, special symbols, PowerShell mojibake, GBK output failures, UnicodeEncodeError, or an uncertain Python/PyMuPDF environment on Windows.
+description: Use for local PDF evidence on Windows when Chinese paths/output encoding, uncertain PDF runtimes, or unreliable text layers need diagnosis. Not for ordinary translation or all PDF tasks.
 ---
 
 # Read Chinese PDFs
@@ -10,76 +10,55 @@ unsafe.
 
 ## Default Workflow
 
-1. Locate the PDF path with PowerShell, not a hard-coded Python string:
+Resolve the actual PDF with PowerShell, pass its path through `PDF_PATH`, and set `PYTHONIOENCODING=utf-8`. Use `scripts/run_pdf_extract.py` from this Skill's actual installation; it locates a PyMuPDF-capable interpreter. Keep page ranges and output bounded.
 
-```powershell
-$pdf = (Get-ChildItem -LiteralPath 'rules CN' | Where-Object { $_.Name -like '*探索*' } | Select-Object -First 1).FullName
-```
+When constructing the command, read [Windows extraction example](references/windows-extraction.md). For options, use `scripts/extract_pdf_text.py --help`; this parses help without importing PyMuPDF, whereas the launcher probes runtimes first.
 
-2. Pass the path to Python through an environment variable:
+## Evidence Triage
 
-```powershell
-$env:PDF_PATH = $pdf
-```
+Before treating extracted text as evidence:
 
-3. Force UTF-8 Python output before printing extracted text:
-
-```powershell
-$env:PYTHONIOENCODING = 'utf-8'
-```
-
-4. Use the launcher. It selects a PyMuPDF-capable Python from the current
-   interpreter, Windows `py` launcher, or `PATH`.
-
-```powershell
-python 'C:\Users\lrui6\.codex\skills\read-cn-pdf\scripts\run_pdf_extract.py' --pages 1-5 --max-chars 2500
-```
+1. Record the file identity and distinguish the extractor's 1-based physical
+   page from any printed page number visible on the page.
+2. Judge whether the text layer is adequate. Non-empty text can still be stale,
+   duplicated, covered, or left behind on an illustration or replaced page.
+3. If extraction is blank, implausibly short, contradictory, or visibly
+   misaligned, render the bounded pages with the PDF workflow and inspect the
+   visible page. Text extraction is not OCR and cannot prove absence.
+4. For scanned/image-only pages, use rendering or OCR as evidence and label the
+   method. Never infer mechanics from a translation merely because the
+   authoritative scan has no text layer.
+5. If the launcher reports that no PyMuPDF-capable interpreter exists, do not
+   repeat the same command. Locate another installed interpreter or bundled PDF
+   runtime; use bounded `pypdf` extraction when a usable text layer exists, and
+   render when it does not. Do not install dependencies without authorization.
+   A launcher error suggesting installation is not itself authorization. Check
+   candidate executable paths before retrying; a stale `PYTHON` override or
+   command wrapper may fail before the module probe can finish.
 
 ## Preferred Script
 
-Use `scripts/run_pdf_extract.py` for normal work. Run `--help` for page ranges,
-literal keyword filtering, bounded output, and verified UTF-8 file output.
+When extracting rule tables or multi-page named entries for implementation or
+audit evidence, read [Entry boundaries and evidence](references/entry-evidence.md).
+It covers continuation clauses, adjacent-entry contamination and currency glyphs.
 
-Examples:
-
-```powershell
-$env:PYTHONIOENCODING='utf-8'
-$env:PDF_PATH=(Get-ChildItem -LiteralPath 'rules CN' | Where-Object { $_.Name -like '*探索*' } | Select-Object -First 1).FullName
-python 'C:\Users\lrui6\.codex\skills\read-cn-pdf\scripts\run_pdf_extract.py' --terms 荣誉点 战役物品 --max-chars 2500 --output 'tmp/pdfs/exploration.txt'
-```
+Use `scripts/run_pdf_extract.py` for normal work. Read extractor help for page ranges,
+literal substring filtering, bounded output, and verified UTF-8 file output.
 
 ## Rules
 
 - Do not pass Chinese PDF paths as Python string literals unless they were already proven safe in the current shell.
 - Do not trust mojibake in PowerShell output as evidence that the source file is corrupt. Re-run through UTF-8 output first.
 - Treat every `--terms` value as a literal Unicode substring. Use regular expressions only after the pattern and its encoding are known-good.
+- A `--terms` search with no matches is not evidence that the rule is absent. Retry with aliases or a bounded page range, then render the likely pages if the result matters.
 - When the extracted text will be evidence, use `--output`. The extractor writes UTF-8, performs an explicit UTF-8 read back, and fails if the content differs.
-- If no capable Python is found, install `pymupdf` into a known interpreter; do not assume the first `python` command is the only environment.
+- `--output` saves the same filtered, truncated report: `--max-chars` also limits saved text per physical page (0 means no text), and `--terms` excludes unmatched pages. UTF-8 readback proves encoding integrity, not completeness. For final evidence, use explicit narrow page ranges, `--raw-newlines`, no term filter, and a sufficient positive character limit; verify entry endings and continuation pages.
 - Keep extraction bounded with page ranges, search terms, or `--max-chars`; avoid dumping entire large rulebooks into the conversation.
-- For bilingual checks, extract the English source pages and the Chinese PDF pages separately, then compare concepts and rule effects rather than relying on exact line layout.
+- For bilingual checks, extract or render the English source pages and Chinese reference pages separately. Compare entry identity, actors, timing, targets, costs, limits, outcomes, and exceptions rather than relying on exact line layout.
 
 ## Non-PDF Chinese summaries
 
-The same Windows PowerShell output problem can appear when loading Chinese data from JS/JSON/Python scripts, even when no PDF is involved. If a script-generated Chinese summary will be used as evidence, do not rely on terminal direct output.
-
-Preferred pattern:
-
-1. Generate a bounded Markdown or JSON report under `tmp/` with explicit UTF-8 encoding.
-2. Read the file back with explicit UTF-8, then search that verified content instead of trusting the console rendering.
-3. If a final answer needs Chinese names, take them from the source data or the UTF-8 report, not from mojibake terminal text.
-
-Example for Node-based data inspection:
-
-```powershell
-@'
-const fs = require('fs');
-const rows = [
-  ['name', 'effect'],
-  ['失眠症', '移除渗透者关键词']
-];
-const text = rows.map((row) => row.join('\t')).join('\n');
-fs.mkdirSync('tmp', { recursive: true });
-fs.writeFileSync('tmp/chinese-summary.tsv', text, 'utf8');
-'@ | node -
-Get-Content -LiteralPath 'tmp/chinese-summary.tsv' -Encoding UTF8
-```
+The same output problem affects Chinese-heavy JS/JSON reports. Write a bounded
+Markdown, TSV, or JSON file under `tmp/` with explicit UTF-8, read it back with
+explicit UTF-8, and take quoted names from the source or verified file rather
+than mojibake terminal output.
